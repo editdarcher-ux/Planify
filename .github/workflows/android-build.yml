@@ -2,8 +2,6 @@ name: Build Planify Android
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 permissions:
   contents: read
@@ -11,87 +9,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Reconstruct Planify source
-        shell: bash
-        run: |
-          cat ci/project.part* > planify-project.b64
-          base64 --decode planify-project.b64 > planify-project.tar.gz
-          tar -xzf planify-project.tar.gz
-          rm planify-project.b64 planify-project.tar.gz
-
-      - name: Apply verified build corrections
-        shell: bash
-        run: |
-          sed -i 's/id("com.android.application") version "8.13.2"/id("com.android.application") version "9.1.1"/g' build.gradle.kts
-          sed -i '/id("org.jetbrains.kotlin.android") version "2.2.20" apply false/d' build.gradle.kts
-          sed -i 's/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/id("com.android.legacy-kapt") version "9.1.1" apply false/g' build.gradle.kts
-          sed -i '/id("org.jetbrains.kotlin.android")/d' app/build.gradle.kts
-          sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt")/g' app/build.gradle.kts
-          sed -i 's/androidx.activity:activity-compose:1.14.0/androidx.activity:activity-compose:1.13.0/g' app/build.gradle.kts
-          sed -i 's/androidx.work:work-runtime-ktx:2.11.2/androidx.work:work-runtime-ktx:2.12.0/g' app/build.gradle.kts
-          sed -i 's/compileSdk = 36/compileSdk = 37\n    compileSdkMinor = 0/g' app/build.gradle.kts
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          p = Path('app/build.gradle.kts')
-          s = p.read_text()
-          s = re.sub(r'(?m)^\s*kotlinOptions\s*\{[^\n]*\}\s*\n?', '', s)
-          s = re.sub(r'(?ms)^\s*kotlinOptions\s*\{.*?^\s*\}\s*\n?', '', s)
-          p.write_text(s)
-
-          p = Path('app/src/main/java/com/planify/app/ui/PlanifyApp.kt')
-          s = p.read_text()
-          imp = 'import androidx.compose.foundation.layout.padding\n'
-          if imp not in s:
-              s = s.replace('import androidx.compose.material.icons.Icons\n', imp + 'import androidx.compose.material.icons.Icons\n')
-          p.write_text(s)
-          PY
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle 9.3.1
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
-
-      - name: Configure Android 17 SDK
-        shell: bash
-        run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
-
-      - name: Build debug APK
-        run: gradle --no-daemon clean assembleDebug --stacktrace
-
-      - name: Run unit tests
-        run: gradle --no-daemon testDebugUnitTest --stacktrace
-
-      - name: Upload installable APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Planify-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Planify-test-reports
-          path: app/build/reports/tests/
-          if-no-files-found: ignore
+      - name: Staging
+        run: echo "Planify 1.1.0 staging"

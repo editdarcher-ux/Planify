@@ -29,9 +29,20 @@ jobs:
         shell: bash
         run: |
           sed -i 's/id("com.android.application") version "8.13.2"/id("com.android.application") version "9.1.1"/g' build.gradle.kts
+          sed -i '/id("org.jetbrains.kotlin.android") version "2.2.20" apply false/d' build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/id("com.android.legacy-kapt") version "9.1.1" apply false/g' build.gradle.kts
+          sed -i '/id("org.jetbrains.kotlin.android")/d' app/build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt")/g' app/build.gradle.kts
           sed -i 's/androidx.activity:activity-compose:1.14.0/androidx.activity:activity-compose:1.13.0/g' app/build.gradle.kts
           sed -i 's/androidx.work:work-runtime-ktx:2.11.2/androidx.work:work-runtime-ktx:2.12.0/g' app/build.gradle.kts
           sed -i 's/compileSdk = 36/compileSdk = 37\n    compileSdkMinor = 0/g' app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          s = s.replace('    kotlinOptions {\n        jvmTarget = "17"\n    }\n', '')
+          p.write_text(s)
+          PY
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

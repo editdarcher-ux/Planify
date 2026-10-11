@@ -44,6 +44,13 @@ jobs:
           s = re.sub(r'(?m)^\s*kotlinOptions\s*\{[^\n]*\}\s*\n?', '', s)
           s = re.sub(r'(?ms)^\s*kotlinOptions\s*\{.*?^\s*\}\s*\n?', '', s)
           p.write_text(s)
+
+          p = Path('app/src/main/java/com/planify/app/ui/PlanifyApp.kt')
+          s = p.read_text()
+          imp = 'import androidx.compose.foundation.layout.padding\n'
+          if imp not in s:
+              s = s.replace('import androidx.compose.material.icons.Icons\n', imp + 'import androidx.compose.material.icons.Icons\n')
+          p.write_text(s)
           PY
 
       - name: Set up JDK 17

@@ -42,17 +42,15 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Apply Android build compatibility corrections
+      - name: Apply proven Android build corrections
         shell: bash
         run: |
           sed -i 's/id("com.android.application") version "8.13.2"/id("com.android.application") version "9.1.1"/g' build.gradle.kts
           sed -i '/id("org.jetbrains.kotlin.android") version "2.2.20" apply false/d' build.gradle.kts
-          sed -i '/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/d' build.gradle.kts
-          sed -i '/id("com.android.legacy-kapt")/d' build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/id("com.android.legacy-kapt") version "9.1.1" apply false/g' build.gradle.kts
           sed -i '/id("org.jetbrains.kotlin.android")/d' app/build.gradle.kts
-          sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt") version "9.1.1"/g' app/build.gradle.kts
-          sed -i 's/compileSdk = 36/compileSdk = 37/g' app/build.gradle.kts
-          sed -i '/^kapt { correctErrorTypes = true }$/d' app/build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt")/g' app/build.gradle.kts
+          sed -i 's/compileSdk = 36/compileSdk = 37\n    compileSdkMinor = 0/g' app/build.gradle.kts
           python3 - <<'PY'
           from pathlib import Path
           import re

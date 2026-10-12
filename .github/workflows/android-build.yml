@@ -17,14 +17,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct Planify 1.1.0 source
+      - name: Reconstruct original Planify source
         shell: bash
         run: |
-          cat ci/current.part00 ci/current.part01 ci/current.part02 ci/current.part03 ci/current.part04 > planify-current.b64
-          base64 --decode planify-current.b64 > planify-current.tar.gz
-          echo "0988fea50beb4376d658114f9780a227bcc9da6ec5be0fa6e652abd6b063700e  planify-current.tar.gz" | sha256sum -c -
-          tar -xzf planify-current.tar.gz
-          rm planify-current.b64 planify-current.tar.gz
+          cat ci/project.part* > planify-project.b64
+          base64 --decode planify-project.b64 > planify-project.tar.gz
+          tar -xzf planify-project.tar.gz
+          rm planify-project.b64 planify-project.tar.gz
+
+      - name: Apply proven Planify 1.1.0 patch
+        shell: bash
+        run: |
+          cat ci/v110.patch.part* > planify-v110-patch.b64
+          base64 --decode planify-v110-patch.b64 > planify-v110-patch.tar.gz
+          echo "232740db39fa75cf3bdacf9ca06fa0b3cad12f4d83a76278c9cc52e0a35d6b30  planify-v110-patch.tar.gz" | sha256sum -c -
+          tar -xzf planify-v110-patch.tar.gz
+          rm planify-v110-patch.b64 planify-v110-patch.tar.gz
 
       - name: Apply Planify 1.2.0 patch
         shell: bash
@@ -50,6 +58,8 @@ jobs:
           sed -i 's/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/id("com.android.legacy-kapt") version "9.1.1" apply false/g' build.gradle.kts
           sed -i '/id("org.jetbrains.kotlin.android")/d' app/build.gradle.kts
           sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt")/g' app/build.gradle.kts
+          sed -i 's/androidx.activity:activity-compose:1.14.0/androidx.activity:activity-compose:1.13.0/g' app/build.gradle.kts
+          sed -i 's/androidx.work:work-runtime-ktx:2.11.2/androidx.work:work-runtime-ktx:2.12.0/g' app/build.gradle.kts
           sed -i 's/compileSdk = 36/compileSdk = 37\n    compileSdkMinor = 0/g' app/build.gradle.kts
           python3 - <<'PY'
           from pathlib import Path

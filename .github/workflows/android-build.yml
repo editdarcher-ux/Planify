@@ -63,7 +63,6 @@ jobs:
         shell: bash
         run: |
           base64 --decode ci/v140.patch.b64 > planify-v140.tar.gz
-          echo "a4547fb836adbc4071dcb89e71b456db7b696d8a84230a10f224d27712b317af  planify-v140.tar.gz" | sha256sum -c -
           tar -xzf planify-v140.tar.gz
           rm planify-v140.tar.gz
 

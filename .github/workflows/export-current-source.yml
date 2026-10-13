@@ -1,0 +1,66 @@
+name: Export current Planify source
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct current source
+        shell: bash
+        run: |
+          cat ci/project.part* > project.b64
+          base64 --decode project.b64 > project.tar.gz
+          tar -xzf project.tar.gz
+          rm project.b64 project.tar.gz
+
+          cat ci/v110.patch.part* > v110.b64
+          base64 --decode v110.b64 > v110.tar.gz
+          tar -xzf v110.tar.gz
+          rm v110.b64 v110.tar.gz
+
+          cat ci/v120s.part00 ci/v120s.part01 ci/v120s.part02 ci/v120s.part03 ci/v120s.part04 ci/v120s.part05 ci/v120s.part06 > v120.b64
+          base64 --decode v120.b64 > v120.tar.gz
+          tar -xzf v120.tar.gz
+          rm v120.b64 v120.tar.gz
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/com/planify/app/ui/screens/CalendarScreen.kt')
+          s=p.read_text()
+          s=s.replace('''                        onPrev = {\n                            month = month.minusMonths(1)\n                            selected = month.minusMonths(1).atDay(1)\n                        },\n                        onNext = {\n                            month = month.plusMonths(1)\n                            selected = month.plusMonths(1).atDay(1)\n                        },''','''                        onPrev = {\n                            val target = month.minusMonths(1)\n                            month = target\n                            selected = target.atDay(1)\n                        },\n                        onNext = {\n                            val target = month.plusMonths(1)\n                            month = target\n                            selected = target.atDay(1)\n                        },''')
+          p.write_text(s)
+          PY
+
+          cat ci/v130n.part00 ci/v130n.part01 ci/v130n.part02 > v130.b64
+          base64 --decode v130.b64 > v130.tar.gz
+          tar -xzf v130.tar.gz
+          rm v130.b64 v130.tar.gz
+
+          cat ci/v140.part00 ci/v140.part01 ci/v140.part02 ci/v140.part03 ci/v140.part04 > v140.b64
+          base64 --decode v140.b64 > v140.tar.gz
+          tar -xzf v140.tar.gz
+          rm v140.b64 v140.tar.gz
+
+          cat ci/v141s.part00 ci/v141s.part01 ci/v141s.part02 > v141.b64
+          base64 --decode v141.b64 > v141.tar.gz
+          tar -xzf v141.tar.gz
+          rm v141.b64 v141.tar.gz
+
+          base64 --decode ci/v142safe.b64 > v142safe.tar.gz
+          tar -xzf v142safe.tar.gz
+          rm v142safe.tar.gz
+
+          tar -czf Planify-current-source.tar.gz app build.gradle.kts gradle.properties settings.gradle.kts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Planify-current-source
+          path: Planify-current-source.tar.gz
+          if-no-files-found: error

@@ -1,0 +1,138 @@
+name: Build Planify 1.4.2 stable
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct current Planify
+        shell: bash
+        run: |
+          cat ci/project.part* > project.b64
+          base64 --decode project.b64 > project.tar.gz
+          tar -xzf project.tar.gz
+          rm project.b64 project.tar.gz
+
+          cat ci/v110.patch.part* > v110.b64
+          base64 --decode v110.b64 > v110.tar.gz
+          tar -xzf v110.tar.gz
+          rm v110.b64 v110.tar.gz
+
+          cat ci/v120s.part00 ci/v120s.part01 ci/v120s.part02 ci/v120s.part03 ci/v120s.part04 ci/v120s.part05 ci/v120s.part06 > v120.b64
+          base64 --decode v120.b64 > v120.tar.gz
+          tar -xzf v120.tar.gz
+          rm v120.b64 v120.tar.gz
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/com/planify/app/ui/screens/CalendarScreen.kt')
+          s=p.read_text()
+          s=s.replace('''                        onPrev = {\n                            month = month.minusMonths(1)\n                            selected = month.minusMonths(1).atDay(1)\n                        },\n                        onNext = {\n                            month = month.plusMonths(1)\n                            selected = month.plusMonths(1).atDay(1)\n                        },''','''                        onPrev = {\n                            val target = month.minusMonths(1)\n                            month = target\n                            selected = target.atDay(1)\n                        },\n                        onNext = {\n                            val target = month.plusMonths(1)\n                            month = target\n                            selected = target.atDay(1)\n                        },''')
+          p.write_text(s)
+          PY
+
+          cat ci/v130n.part00 ci/v130n.part01 ci/v130n.part02 > v130.b64
+          base64 --decode v130.b64 > v130.tar.gz
+          tar -xzf v130.tar.gz
+          rm v130.b64 v130.tar.gz
+
+          cat ci/v140.part00 ci/v140.part01 ci/v140.part02 ci/v140.part03 ci/v140.part04 > v140.b64
+          base64 --decode v140.b64 > v140.tar.gz
+          tar -xzf v140.tar.gz
+          rm v140.b64 v140.tar.gz
+
+          cat ci/v141s.part00 ci/v141s.part01 ci/v141s.part02 > v141.b64
+          base64 --decode v141.b64 > v141.tar.gz
+          tar -xzf v141.tar.gz
+          rm v141.b64 v141.tar.gz
+
+      - name: Apply 1.4.2 stability patch
+        shell: bash
+        run: |
+          base64 --decode ci/v142safe.b64 > v142safe.tar.gz
+          echo "afd5ed67f601848430b16fb771613cfb4a4d1760adeb62f0eb064bd6a017ed23  v142safe.tar.gz" | sha256sum -c -
+          tar -xzf v142safe.tar.gz
+          rm v142safe.tar.gz
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('app/build.gradle.kts')
+          s=p.read_text()
+          s=re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 6', s)
+          s=re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "1.4.2"', s)
+          p.write_text(s)
+          PY
+
+      - name: Fix remaining sources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/java/com/planify/app/ui/screens/ScheduleScreen.kt')
+          s=p.read_text()
+          s=s.replace('''                if (bitmap != null) {\n                    Image(\n                        bitmap = bitmap.asImageBitmap(),''','''                val displayBitmap = bitmap\n                if (displayBitmap != null) {\n                    Image(\n                        bitmap = displayBitmap.asImageBitmap(),''')
+          p.write_text(s)
+          PY
+
+      - name: Android build corrections
+        shell: bash
+        run: |
+          sed -i 's/id("com.android.application") version "8.13.2"/id("com.android.application") version "9.1.1"/g' build.gradle.kts
+          sed -i '/id("org.jetbrains.kotlin.android") version "2.2.20" apply false/d' build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/id("com.android.legacy-kapt") version "9.1.1" apply false/g' build.gradle.kts
+          sed -i '/id("org.jetbrains.kotlin.android")/d' app/build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt")/g' app/build.gradle.kts
+          sed -i 's/androidx.activity:activity-compose:1.14.0/androidx.activity:activity-compose:1.13.0/g' app/build.gradle.kts
+          sed -i 's/androidx.work:work-runtime-ktx:2.11.2/androidx.work:work-runtime-ktx:2.12.0/g' app/build.gradle.kts
+          sed -i 's/compileSdk = 36/compileSdk = 37\n    compileSdkMinor = 0/g' app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('app/build.gradle.kts')
+          s=p.read_text()
+          s=re.sub(r'(?m)^\s*kotlinOptions\s*\{[^\n]*\}\s*\n?', '', s)
+          s=re.sub(r'(?ms)^\s*kotlinOptions\s*\{.*?^\s*\}\s*\n?', '', s)
+          p.write_text(s)
+          PY
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: SDK
+        shell: bash
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Build APK
+        run: gradle --no-daemon clean assembleDebug --stacktrace
+
+      - name: Run unit tests
+        run: gradle --no-daemon testDebugUnitTest --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Planify-1.4.2-stable-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

@@ -1,0 +1,115 @@
+name: Build Planify 1.4.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct Planify 1.3.0
+        shell: bash
+        run: |
+          cat ci/project.part* > project.b64
+          base64 --decode project.b64 > project.tar.gz
+          tar -xzf project.tar.gz
+          rm project.b64 project.tar.gz
+
+          cat ci/v110.patch.part* > v110.b64
+          base64 --decode v110.b64 > v110.tar.gz
+          echo "232740db39fa75cf3bdacf9ca06fa0b3cad12f4d83a76278c9cc52e0a35d6b30  v110.tar.gz" | sha256sum -c -
+          tar -xzf v110.tar.gz
+          rm v110.b64 v110.tar.gz
+
+          cat ci/v120s.part00 ci/v120s.part01 ci/v120s.part02 ci/v120s.part03 ci/v120s.part04 ci/v120s.part05 ci/v120s.part06 > v120.b64
+          base64 --decode v120.b64 > v120.tar.gz
+          echo "fdbe0dd2fc4410ce805063cfe94f03f37d851d9d0e1b66ce996f6f03b864c6c5  v120.tar.gz" | sha256sum -c -
+          tar -xzf v120.tar.gz
+          rm v120.b64 v120.tar.gz
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/planify/app/ui/screens/CalendarScreen.kt')
+          s = p.read_text()
+          s = s.replace('''                        onPrev = {\n                            month = month.minusMonths(1)\n                            selected = month.minusMonths(1).atDay(1)\n                        },\n                        onNext = {\n                            month = month.plusMonths(1)\n                            selected = month.plusMonths(1).atDay(1)\n                        },''','''                        onPrev = {\n                            val target = month.minusMonths(1)\n                            month = target\n                            selected = target.atDay(1)\n                        },\n                        onNext = {\n                            val target = month.plusMonths(1)\n                            month = target\n                            selected = target.atDay(1)\n                        },''')
+          p.write_text(s)
+          PY
+
+          cat ci/v130n.part00 ci/v130n.part01 ci/v130n.part02 > v130.b64
+          base64 --decode v130.b64 > v130.tar.gz
+          echo "b9f8b9b536af97f8c6104d53f11a35a5e00e8f0f8dd7887468301d9b2625101e  v130.tar.gz" | sha256sum -c -
+          tar -xzf v130.tar.gz
+          rm v130.b64 v130.tar.gz
+
+      - name: Apply Planify 1.4.0 patch
+        shell: bash
+        run: |
+          cat ci/v140.part00 ci/v140.part01 ci/v140.part02 ci/v140.part03 ci/v140.part04 > v140.b64
+          base64 --decode v140.b64 > v140.tar.gz
+          echo "a4547fb836adbc4071dcb89e71b456db7b696d8a84230a10f224d27712b317af  v140.tar.gz" | sha256sum -c -
+          tar -xzf v140.tar.gz
+          rm v140.b64 v140.tar.gz
+
+      - name: Apply Android build corrections
+        shell: bash
+        run: |
+          sed -i 's/id("com.android.application") version "8.13.2"/id("com.android.application") version "9.1.1"/g' build.gradle.kts
+          sed -i '/id("org.jetbrains.kotlin.android") version "2.2.20" apply false/d' build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt") version "2.2.20" apply false/id("com.android.legacy-kapt") version "9.1.1" apply false/g' build.gradle.kts
+          sed -i '/id("org.jetbrains.kotlin.android")/d' app/build.gradle.kts
+          sed -i 's/id("org.jetbrains.kotlin.kapt")/id("com.android.legacy-kapt")/g' app/build.gradle.kts
+          sed -i 's/androidx.activity:activity-compose:1.14.0/androidx.activity:activity-compose:1.13.0/g' app/build.gradle.kts
+          sed -i 's/androidx.work:work-runtime-ktx:2.11.2/androidx.work:work-runtime-ktx:2.12.0/g' app/build.gradle.kts
+          sed -i 's/compileSdk = 36/compileSdk = 37\n    compileSdkMinor = 0/g' app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          s = re.sub(r'(?m)^\s*kotlinOptions\s*\{[^\n]*\}\s*\n?', '', s)
+          s = re.sub(r'(?ms)^\s*kotlinOptions\s*\{.*?^\s*\}\s*\n?', '', s)
+          p.write_text(s)
+          PY
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Configure Android 17 SDK
+        shell: bash
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Build APK
+        run: gradle --no-daemon clean assembleDebug --stacktrace
+
+      - name: Run unit tests
+        run: gradle --no-daemon testDebugUnitTest --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Planify-1.4.0-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

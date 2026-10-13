@@ -59,6 +59,14 @@ jobs:
           tar -xzf planify-v130.tar.gz
           rm planify-v130.b64 planify-v130.tar.gz
 
+      - name: Apply Planify 1.4.0 patch
+        shell: bash
+        run: |
+          base64 --decode ci/v140.patch.b64 > planify-v140.tar.gz
+          echo "a4547fb836adbc4071dcb89e71b456db7b696d8a84230a10f224d27712b317af  planify-v140.tar.gz" | sha256sum -c -
+          tar -xzf planify-v140.tar.gz
+          rm planify-v140.tar.gz
+
       - name: Apply proven Android build corrections
         shell: bash
         run: |
@@ -102,15 +110,15 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
 
-      - name: Build Planify 1.3.0 APK
+      - name: Build Planify 1.4.0 APK
         run: gradle --no-daemon clean assembleDebug --stacktrace
 
       - name: Run unit tests
         run: gradle --no-daemon testDebugUnitTest --stacktrace
 
-      - name: Upload Planify 1.3.0 APK
+      - name: Upload Planify 1.4.0 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Planify-1.3.0-apk
+          name: Planify-1.4.0-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

@@ -60,7 +60,12 @@ jobs:
 
       - name: Apply Planify 1.4.1 stability hotfix
         shell: bash
-        run: tar -xzf ci/v141.tar.gz
+        run: |
+          cat ci/v141s.part00 ci/v141s.part01 ci/v141s.part02 > v141.b64
+          base64 --decode v141.b64 > v141.tar.gz
+          echo "e4beb8c20843459c2aa04a57eb4fae830d37586b9af3cddff163c2c87eee4cee  v141.tar.gz" | sha256sum -c -
+          tar -xzf v141.tar.gz
+          rm v141.b64 v141.tar.gz
 
       - name: Apply Android build corrections
         shell: bash

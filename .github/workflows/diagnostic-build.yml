@@ -1,0 +1,215 @@
+name: Build Planify diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnostic-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record diagnostic run id
+        shell: bash
+        run: |
+          mkdir -p ci
+          printf '%s\n' '${{ github.run_id }}' > ci/latest-diagnostic-run.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ci/latest-diagnostic-run.txt
+          git commit -m 'Record Planify diagnostic build run id' || true
+          git push || (git pull --rebase origin main && git push)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Add on-device crash diagnostics
+        shell: bash
+        run: |
+          cat > clean-app/app/src/main/java/com/planify/app/PlanifyApplication.java <<'JAVA'
+          package com.planify.app;
+
+          import android.app.Application;
+          import java.io.PrintWriter;
+          import java.io.StringWriter;
+
+          public final class PlanifyApplication extends Application {
+              @Override public void onCreate() {
+                  super.onCreate();
+                  final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+                  Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+                      try {
+                          StringWriter sw = new StringWriter();
+                          PrintWriter pw = new PrintWriter(sw);
+                          pw.println("Planify 1.5.1 diagnostic");
+                          pw.println("Thread: " + (thread == null ? "unknown" : thread.getName()));
+                          pw.println("Android: " + android.os.Build.VERSION.RELEASE + " (API " + android.os.Build.VERSION.SDK_INT + ")");
+                          pw.println("Device: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
+                          pw.println();
+                          if (error != null) error.printStackTrace(pw);
+                          pw.flush();
+                          getSharedPreferences("planify_crash_diag", MODE_PRIVATE)
+                                  .edit().putString("last_crash", sw.toString()).commit();
+                      } catch (Throwable ignored) {}
+                      if (previous != null) previous.uncaughtException(thread, error);
+                      else System.exit(10);
+                  });
+              }
+          }
+          JAVA
+
+          cat > clean-app/app/src/main/java/com/planify/app/CrashGateActivity.java <<'JAVA'
+          package com.planify.app;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.ClipData;
+          import android.content.ClipboardManager;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.os.Bundle;
+          import android.widget.TextView;
+          import android.widget.ScrollView;
+          import android.view.ViewGroup;
+
+          public final class CrashGateActivity extends Activity {
+              private String report;
+
+              @Override protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+                  report = getSharedPreferences("planify_crash_diag", MODE_PRIVATE)
+                          .getString("last_crash", null);
+                  if (report == null || report.trim().isEmpty()) {
+                      openPlanify();
+                      return;
+                  }
+                  showReport();
+              }
+
+              private void showReport() {
+                  TextView text = new TextView(this);
+                  text.setText(report);
+                  text.setTextIsSelectable(true);
+                  text.setTextSize(12f);
+                  int pad = Math.round(16 * getResources().getDisplayMetrics().density);
+                  text.setPadding(pad, pad, pad, pad);
+                  ScrollView scroll = new ScrollView(this);
+                  scroll.addView(text, new ScrollView.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+                  AlertDialog dialog = new AlertDialog.Builder(this)
+                          .setTitle("Planify detectó el fallo")
+                          .setView(scroll)
+                          .setPositiveButton("Continuar", null)
+                          .setNegativeButton("Copiar error", null)
+                          .setNeutralButton("Cerrar", (d, w) -> finish())
+                          .create();
+                  dialog.setOnShowListener(x -> {
+                      dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(v -> {
+                          ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                          if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Error Planify", report));
+                      });
+                      dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                          getSharedPreferences("planify_crash_diag", MODE_PRIVATE).edit().remove("last_crash").commit();
+                          dialog.dismiss();
+                          openPlanify();
+                      });
+                  });
+                  dialog.setCanceledOnTouchOutside(false);
+                  dialog.show();
+              }
+
+              private void openPlanify() {
+                  startActivity(new Intent(this, MainActivity.class));
+                  finish();
+              }
+          }
+          JAVA
+
+          cat > clean-app/app/src/main/AndroidManifest.xml <<'XML'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+              <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+              <application
+                  android:name=".PlanifyApplication"
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:label="Planify"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.Planify">
+
+                  <activity android:name=".MainActivity" android:exported="false" android:screenOrientation="unspecified" />
+
+                  <activity android:name=".CrashGateActivity" android:exported="true" android:screenOrientation="unspecified">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <receiver android:name=".AlarmReceiver" android:exported="false" />
+                  <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.BOOT_COMPLETED" />
+                          <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                      </intent-filter>
+                  </receiver>
+              </application>
+          </manifest>
+          XML
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('clean-app/app/build.gradle.kts')
+          s=p.read_text()
+          s=s.replace('versionCode = 20', 'versionCode = 21')
+          s=s.replace('versionName = "1.5.0"', 'versionName = "1.5.1-diagnostic"')
+          p.write_text(s)
+          PY
+
+      - name: Build diagnostic APK
+        working-directory: clean-app
+        run: gradle --no-daemon clean assembleDebug --stacktrace
+
+      - name: Validate diagnostic APK
+        working-directory: clean-app
+        run: |
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          unzip -t app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload diagnostic APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Planify-1.5.1-diagnostic-apk
+          path: clean-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

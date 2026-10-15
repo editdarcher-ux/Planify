@@ -1,4 +1,4 @@
-name: Build clean Planify stable
+name: Build Planify 1.6.0 final
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
       - '.github/workflows/clean-rebuild-v2.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -49,22 +49,10 @@ jobs:
           unzip -t app/build/outputs/apk/debug/app-debug.apk >/dev/null
           sha256sum app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload APK
+      - name: Upload final APK
         uses: actions/upload-artifact@v4
         with:
-          name: Planify-1.6.0-apk
+          name: Planify-1.6.0-final-apk
           path: clean-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-
-      - name: Record run id
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p ci
-          printf '%s\n' '${{ github.run_id }}' > ci/latest-clean-run.txt
-          printf '%s\n' '${{ job.status }}' > ci/latest-clean-status.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ci/latest-clean-run.txt ci/latest-clean-status.txt
-          git commit -m 'Record latest clean Planify build run' || exit 0
-          git push
+          retention-days: 30

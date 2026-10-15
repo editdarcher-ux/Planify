@@ -114,9 +114,9 @@ jobs:
             subprocess.run(['adb','shell','input','tap',str(x),str(y)],check=True)
             subprocess.run(['adb','shell','input','text','PruebaPlanify'],check=True)
             PY
-            adb shell input keyevent 4
             sleep 1
-            python3 /tmp/tap_text.py 'Guardar'
+            # No usar "atrás": si el teclado ya está oculto, cierra el formulario sin guardar.
+            python3 /tmp/tap_text.py 'Guardar' || { adb shell input keyevent 111; sleep 1; python3 /tmp/tap_text.py 'Guardar'; }
             sleep 3
 
             echo '--- PROCESS ---'
@@ -126,6 +126,14 @@ jobs:
 
             if ! adb shell pidof com.planify.app >/dev/null; then
               exit 21
+            fi
+
+            echo '--- AJUSTES ---'
+            python3 /tmp/tap_text.py 'Ajustes'
+            sleep 2
+            if ! adb shell pidof com.planify.app >/dev/null; then
+              adb logcat -d -v threadtime '*:E' | tail -n 200
+              exit 22
             fi
 
             echo 'Runtime smoke passed'

@@ -1,9 +1,26 @@
 <resources>
-    <style name="Theme.Planify" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.Planify" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">#F5F5F7</item>
-        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:statusBarColor">#FAFAFC</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <!-- Temas forzados desde Ajustes → Tema -->
+    <style name="Theme.Planify.ForceLight" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:statusBarColor">#FAFAFC</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+
+    <style name="Theme.Planify.ForceDark" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">#1F1D22</item>
+        <item name="android:statusBarColor">#100E13</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

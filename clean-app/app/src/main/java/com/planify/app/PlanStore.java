@@ -109,6 +109,38 @@ public final class PlanStore {
         e.apply();
     }
 
+    public String getSoundName() { return prefs.getString("sound_name", null); }
+    public void setSoundName(String name) {
+        SharedPreferences.Editor e = prefs.edit();
+        if (name == null || name.isEmpty()) e.remove("sound_name"); else e.putString("sound_name", name);
+        e.apply();
+    }
+
+    /** "system", "light" o "dark". */
+    public String themeMode() {
+        String v = safeString("theme_mode", "system");
+        return "light".equals(v) || "dark".equals(v) ? v : "system";
+    }
+    public void setThemeMode(String mode) { prefs.edit().putString("theme_mode", mode).apply(); }
+
+    public int accentColor() { return safeInt("accent_color", 0xFF5B3FA6); }
+    public void setAccentColor(int color) { prefs.edit().putInt("accent_color", color).apply(); }
+
+    public String getMusicUri() { return safeString("music_uri", null); }
+    public String getMusicName() { return safeString("music_name", null); }
+    public void setMusic(String uri, String name) {
+        SharedPreferences.Editor e = prefs.edit();
+        if (uri == null || uri.isEmpty()) { e.remove("music_uri"); e.remove("music_name"); }
+        else { e.putString("music_uri", uri); e.putString("music_name", name == null ? "Música" : name); }
+        e.apply();
+    }
+    public boolean musicLoop() { return safeBool("music_loop", true); }
+    public void setMusicLoop(boolean v) { prefs.edit().putBoolean("music_loop", v).apply(); }
+
+    private String safeString(String key, String def) { try { return prefs.getString(key, def); } catch (Exception e) { return def; } }
+    private int safeInt(String key, int def) { try { return prefs.getInt(key, def); } catch (Exception e) { return def; } }
+    private boolean safeBool(String key, boolean def) { try { return prefs.getBoolean(key, def); } catch (Exception e) { return def; } }
+
     public boolean soundEnabled() { return prefs.getBoolean("sound_enabled", true); }
     public void setSoundEnabled(boolean v) { prefs.edit().putBoolean("sound_enabled", v).apply(); }
     public boolean vibrationEnabled() { return prefs.getBoolean("vibration_enabled", true); }

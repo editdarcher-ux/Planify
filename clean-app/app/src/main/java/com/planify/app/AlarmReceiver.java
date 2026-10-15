@@ -35,7 +35,18 @@ public final class AlarmReceiver extends BroadcastReceiver {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm == null) return;
             String channelId = "planify_alarm_" + (sound == null ? "silent" : Integer.toHexString(sound.toString().hashCode())) + "_" + (store.vibrationEnabled() ? "v" : "n");
+            if (sound != null && "content".equals(sound.getScheme())) {
+                // El sonido lo reproduce el sistema (SystemUI), no la app: hay que darle permiso de lectura.
+                try { context.grantUriPermission("com.android.systemui", sound, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Throwable ignored) {}
+                try { context.grantUriPermission("android", sound, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (Throwable ignored) {}
+            }
             if (Build.VERSION.SDK_INT >= 26) {
+                try {
+                    for (NotificationChannel old : nm.getNotificationChannels()) {
+                        String id = old.getId();
+                        if (id != null && id.startsWith("planify_alarm_") && !id.equals(channelId)) nm.deleteNotificationChannel(id);
+                    }
+                } catch (Throwable ignored) {}
                 NotificationChannel channel = new NotificationChannel(channelId, "Avisos de Planify", NotificationManager.IMPORTANCE_HIGH);
                 channel.enableVibration(store.vibrationEnabled());
                 if (sound != null) {
@@ -53,7 +64,8 @@ public final class AlarmReceiver extends BroadcastReceiver {
                     .setContentText(message == null || message.isEmpty() ? "Aviso programado" : message)
                     .setAutoCancel(true)
                     .setContentIntent(content)
-                    .setPriority(Notification.PRIORITY_HIGH);
+                    .setPriority(Notification.PRIORITY_HIGH)
+                    .setCategory(Notification.CATEGORY_REMINDER);
             if (Build.VERSION.SDK_INT < 26) {
                 if (sound != null) b.setSound(sound);
                 if (store.vibrationEnabled()) b.setVibrate(new long[]{0, 400, 250, 400});

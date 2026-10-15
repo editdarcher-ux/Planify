@@ -9,7 +9,7 @@ on:
       - '.github/workflows/runtime-smoke.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   smoke:
@@ -17,17 +17,6 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-
-      - name: Record run id at start
-        shell: bash
-        run: |
-          mkdir -p ci
-          printf '%s\n' '${{ github.run_id }}' > ci/latest-runtime-smoke-run.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ci/latest-runtime-smoke-run.txt
-          git commit -m 'Record Android 15 runtime smoke run id' || true
-          git push || (git pull --rebase origin main && git push)
 
       - uses: actions/setup-java@v4
         with:
@@ -53,6 +42,14 @@ jobs:
         working-directory: clean-app
         run: gradle --no-daemon clean assembleDebug --stacktrace
 
+      - name: Enable KVM acceleration
+        shell: bash
+        run: |
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm
+            ls -l /dev/kvm
+          fi
+
       - name: Android 15 runtime smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -61,6 +58,8 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
             set -e
             APK="clean-app/app/build/outputs/apk/debug/app-debug.apk"
@@ -68,7 +67,7 @@ jobs:
             adb logcat -c
             adb shell am force-stop com.planify.app || true
             adb shell monkey -p com.planify.app -c android.intent.category.LAUNCHER 1 >/dev/null
-            sleep 3
+            sleep 4
 
             cat > /tmp/tap_text.py <<'PY'
             import re, subprocess, sys, xml.etree.ElementTree as ET
@@ -110,25 +109,20 @@ jobs:
                 raise SystemExit('No EditText found')
             n=edits[0]
             m=re.match(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', n.attrib['bounds'])
-            x=(int(m.group(1))+int(m.group(3)))//2; y=(int(m.group(2))+int(m.group(4)))//2
+            x=(int(m.group(1))+int(m.group(3)))//2
+            y=(int(m.group(2))+int(m.group(4)))//2
             subprocess.run(['adb','shell','input','tap',str(x),str(y)],check=True)
             subprocess.run(['adb','shell','input','text','PruebaPlanify'],check=True)
             PY
             sleep 1
-            # No usar "atrás": si el teclado ya está oculto, cierra el formulario sin guardar.
             python3 /tmp/tap_text.py 'Guardar' || { adb shell input keyevent 111; sleep 1; python3 /tmp/tap_text.py 'Guardar'; }
             sleep 3
 
-            echo '--- PROCESS ---'
-            adb shell pidof com.planify.app || true
-            echo '--- FATAL/CRASH LOGS ---'
-            adb logcat -d -v threadtime | grep -E 'FATAL EXCEPTION|AndroidRuntime|Process: com\.planify\.app|am_crash|com\.planify\.app' | tail -n 250 || true
-
             if ! adb shell pidof com.planify.app >/dev/null; then
+              adb logcat -d -v threadtime | grep -E 'FATAL EXCEPTION|AndroidRuntime|Process: com\.planify\.app|am_crash' | tail -n 250 || true
               exit 21
             fi
 
-            echo '--- AJUSTES ---'
             python3 /tmp/tap_text.py 'Ajustes'
             sleep 2
             if ! adb shell pidof com.planify.app >/dev/null; then
@@ -138,15 +132,16 @@ jobs:
 
             echo 'Runtime smoke passed'
 
-      - name: Record smoke status
-        if: always()
-        shell: bash
+      - name: Validate APK archive
+        working-directory: clean-app
         run: |
-          git pull --rebase origin main || true
-          mkdir -p ci
-          printf '%s\n' '${{ job.status }}' > ci/latest-runtime-smoke-status.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ci/latest-runtime-smoke-status.txt
-          git commit -m 'Record latest Android 15 runtime smoke status' || exit 0
-          git push || (git pull --rebase origin main && git push)
+          unzip -t app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload runtime-validated APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Planify-1.6.0-runtime-validated-apk
+          path: clean-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

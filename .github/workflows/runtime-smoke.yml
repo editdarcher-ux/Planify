@@ -18,6 +18,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Record run id at start
+        shell: bash
+        run: |
+          mkdir -p ci
+          printf '%s\n' '${{ github.run_id }}' > ci/latest-runtime-smoke-run.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ci/latest-runtime-smoke-run.txt
+          git commit -m 'Record Android 15 runtime smoke run id' || true
+          git push || (git pull --rebase origin main && git push)
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -43,7 +54,6 @@ jobs:
         run: gradle --no-daemon clean assembleDebug --stacktrace
 
       - name: Android 15 runtime smoke
-        id: runtime
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -120,15 +130,15 @@ jobs:
 
             echo 'Runtime smoke passed'
 
-      - name: Record smoke run id
+      - name: Record smoke status
         if: always()
         shell: bash
         run: |
+          git pull --rebase origin main || true
           mkdir -p ci
-          printf '%s\n' '${{ github.run_id }}' > ci/latest-runtime-smoke-run.txt
           printf '%s\n' '${{ job.status }}' > ci/latest-runtime-smoke-status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ci/latest-runtime-smoke-run.txt ci/latest-runtime-smoke-status.txt
-          git commit -m 'Record latest Android 15 runtime smoke run' || exit 0
-          git push
+          git add ci/latest-runtime-smoke-status.txt
+          git commit -m 'Record latest Android 15 runtime smoke status' || exit 0
+          git push || (git pull --rebase origin main && git push)
